@@ -226,6 +226,24 @@ func (kkm KKMap[K1, K2, V]) Get(k1 K1, k2 K2) (v V, exist bool) {
 	}
 }
 
+func (kkm KKMap[K1, K2, V]) Range(callback func(k1 K1, k2 K2, v V) (goon bool)) {
+	if len(kkm) == 0 {
+		return
+	}
+	for k1, km := range kkm {
+		if len(km) == 0 {
+			continue
+		}
+		for k2, v := range km {
+			if callback(k1, k2, v) {
+				continue
+			} else {
+				return
+			}
+		}
+	}
+}
+
 type KSet[K comparable] map[K]struct{}
 
 func (km KSet[K]) Append(ks ...K) KSet[K] {
