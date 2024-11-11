@@ -180,6 +180,18 @@ func (km KMap[K, V]) List(keys ...K) []V {
 	return ret
 }
 
+// SubMap generate a new map with all keys from ks, even if there's no corresponding value in km.
+func (km KMap[K, V]) SubMap(ks ...K) KMap[K, V] {
+	if len(ks) == 0 {
+		return km
+	}
+	m := make(KMap[K, V], len(ks))
+	for _, k := range ks {
+		m[k] = km[k]
+	}
+	return m
+}
+
 type KKMap[K1 comparable, K2 comparable, V any] map[K1]map[K2]V
 
 func (kkm KKMap[K1, K2, V]) Put(k1 K1, k2 K2, v V) KKMap[K1, K2, V] {
@@ -193,6 +205,15 @@ func (kkm KKMap[K1, K2, V]) Put(k1 K1, k2 K2, v V) KKMap[K1, K2, V] {
 		kkmm[k1] = kmm
 	}
 	kmm[k2] = v
+	return kkmm
+}
+
+func (kkm KKMap[K1, K2, V]) PutKey(k1 K1, km2 map[K2]V) KKMap[K1, K2, V] {
+	kkmm := kkm
+	if kkmm == nil {
+		kkmm = make(KKMap[K1, K2, V])
+	}
+	kkmm[k1] = km2
 	return kkmm
 }
 
@@ -226,18 +247,30 @@ func (kkm KKMap[K1, K2, V]) Get(k1 K1, k2 K2) (v V, exist bool) {
 	}
 }
 
-func (kkm KKMap[K1, K2, V]) Range(callback func(k1 K1, k2 K2, v V) (goon bool)) {
+func (kkm KKMap[K1, K2, V]) GetByKey(k1 K1) (KMap[K2, V], bool) {
+	km, exist := kkm[k1]
+	return km, exist
+}
+
+func (kkm KKMap[K1, K2, V]) IsExist(k1 K1, k2 K2) (exist bool) {
+	if len(kkm) == 0 {
+		return false
+	}
+	if km, ok := kkm[k1]; !ok || len(km) == 0 {
+		return false
+	} else {
+		_, exist = km[k2]
+		return exist
+	}
+}
+
+func (kkm KKMap[K1, K2, V]) Range(handler func(k1 K1, k2 K2, v V) (goon bool)) {
 	if len(kkm) == 0 {
 		return
 	}
 	for k1, km := range kkm {
-		if len(km) == 0 {
-			continue
-		}
 		for k2, v := range km {
-			if callback(k1, k2, v) {
-				continue
-			} else {
+			if !handler(k1, k2, v) {
 				return
 			}
 		}
@@ -300,11 +333,14 @@ func (km KSet[K]) IsExist(k K) bool {
 	return exist
 }
 
-func (km KSet[K]) Slice() []K {
+func (km KSet[K]) Slice(emptyNil ...bool) []K {
 	if km == nil {
 		return nil
 	}
 	if len(km) == 0 {
+		if len(emptyNil) > 0 && emptyNil[0] {
+			return nil
+		}
 		return []K{}
 	}
 	ks := make([]K, 0, len(km))
