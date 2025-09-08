@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"sort"
 	"strings"
 )
 
@@ -47,9 +48,8 @@ func (ss SS) Append(s ...string) SS {
 	return r
 }
 
-func (ss SS) Slice() []string {
-	return ([]string)(ss)
-}
+func (ss SS) Sort() SS        { sort.Strings(ss); return ss }
+func (ss SS) Slice() []string { return ss }
 
 func (ss SS) Clone() SS {
 	if ss == nil {
@@ -93,6 +93,31 @@ func (ss SS) Dedup(transfers ...func(input string) (string, bool)) SS {
 	return rr
 }
 
+func (ss SS) Has(s string) bool {
+	if len(ss) == 0 {
+		return false
+	}
+	for _, sss := range ss {
+		if sss == s {
+			return true
+		}
+	}
+	return false
+}
+
+// Matchs if any s in ss contained by str
+func (ss SS) Matchs(str string) bool {
+	if len(ss) == 0 || str == "" {
+		return false
+	}
+	for _, s := range ss {
+		if s != "" && strings.Contains(str, s) {
+			return true
+		}
+	}
+	return false
+}
+
 type KMap[K comparable, V any] map[K]V
 
 func (km KMap[K, V]) Map() map[K]V {
@@ -112,11 +137,13 @@ func (km KMap[K, V]) Merge(kmo KMap[K, V]) KMap[K, V] {
 	if len(kmo) == 0 {
 		return km
 	}
-	m := km
-	for k, v := range kmo {
-		m = m.Put(k, v)
+	if len(km) == 0 {
+		return kmo
 	}
-	return m
+	for k, v := range kmo {
+		km[k] = v
+	}
+	return km
 }
 
 func (km KMap[K, V]) Delete(ks ...K) {
@@ -176,6 +203,20 @@ func (km KMap[K, V]) List(keys ...K) []V {
 	}
 	for i, k := range keys {
 		ret[i] = km[k]
+	}
+	return ret
+}
+
+func (km KMap[K, V]) ExistingList(keys ...K) []V {
+	var ret []V
+	if len(km) == 0 || len(keys) == 0 {
+		return ret
+	}
+	for _, k := range keys {
+		v, ok := km[k]
+		if ok {
+			ret = append(ret, v)
+		}
 	}
 	return ret
 }
@@ -247,11 +288,6 @@ func (kkm KKMap[K1, K2, V]) Get(k1 K1, k2 K2) (v V, exist bool) {
 	}
 }
 
-func (kkm KKMap[K1, K2, V]) GetByKey(k1 K1) (KMap[K2, V], bool) {
-	km, exist := kkm[k1]
-	return km, exist
-}
-
 func (kkm KKMap[K1, K2, V]) IsExist(k1 K1, k2 K2) (exist bool) {
 	if len(kkm) == 0 {
 		return false
@@ -262,6 +298,11 @@ func (kkm KKMap[K1, K2, V]) IsExist(k1 K1, k2 K2) (exist bool) {
 		_, exist = km[k2]
 		return exist
 	}
+}
+
+func (kkm KKMap[K1, K2, V]) IsExistKey(k1 K1) (exist bool) {
+	_, exist = kkm[k1]
+	return
 }
 
 func (kkm KKMap[K1, K2, V]) Range(handler func(k1 K1, k2 K2, v V) (goon bool)) {
@@ -307,11 +348,10 @@ func (km KSet[K]) AppendSet(s KSet[K]) KSet[K] {
 	if len(km) == 0 {
 		return s
 	}
-	var ret = km
 	for k := range s {
-		ret = ret.Append(k)
+		km[k] = struct{}{}
 	}
-	return ret
+	return km
 }
 
 func (km KSet[K]) CAS(k K) (set KSet[K], changed bool) {
@@ -379,6 +419,19 @@ func (km KSet[K]) Equal(o KSet[K]) bool {
 	return true
 }
 
+func (km KSet[K]) ExsitingList(ks ...K) []K {
+	var ret []K
+	if len(km) == 0 || len(ks) == 0 {
+		return ret
+	}
+	for _, k := range ks {
+		if _, ok := km[k]; ok {
+			ret = append(ret, k)
+		}
+	}
+	return ret
+}
+
 type KS[K comparable] []K
 
 func (ks KS[K]) Dedup(validators ...func(k K) bool) KS[K] {
@@ -425,6 +478,24 @@ func (ks KS[K]) Dedup(validators ...func(k K) bool) KS[K] {
 		}
 		return r
 	}
+}
+
+func (ks KS[K]) Equal(os KS[K]) bool {
+	if ks == nil && os == nil {
+		return true
+	}
+	if ks == nil || os == nil {
+		return false
+	}
+	if len(ks) != len(os) {
+		return false
+	}
+	for i := 0; i < len(ks); i++ {
+		if ks[i] != os[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (ks KS[K]) DedupRange(one func(k K) error) error {
@@ -516,6 +587,24 @@ func (ks KS[K]) Remove(tgts ...K) KS[K] {
 	}
 }
 
+func (ks KS[K]) Sub(offset, limit int) KS[K] {
+	if len(ks) == 0 {
+		return nil
+	}
+	if offset < len(ks) {
+		end := offset + limit
+		if end > len(ks) {
+			end = len(ks)
+		}
+		return ks[offset:end]
+	}
+	return nil
+}
+
+func (ks KS[K]) Append(k K) KS[K] {
+	return append(ks, k)
+}
+
 type KV[K comparable, V any] struct{}
 
 func (KV[K, V]) OneOfMap(k K, mapper func([]K) (map[K]V, error)) (v V, err error) {
@@ -536,18 +625,6 @@ func (KV[K, V]) List(keys []K, valuesMap map[K]V) []V {
 		r[i] = valuesMap[keys[i]]
 	}
 	return r
-}
-
-// SubMap generate a new map with all keys from ks, even if there's no corresponding value in valuesMap.
-func (KV[K, V]) SubMap(valuesMap map[K]V, ks ...K) map[K]V {
-	if len(ks) == 0 {
-		return nil
-	}
-	m := make(map[K]V, len(ks))
-	for _, k := range ks {
-		m[k] = valuesMap[k]
-	}
-	return m
 }
 
 func (KV[K, V]) MapKeys(m map[K]V) []K {

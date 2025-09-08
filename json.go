@@ -213,3 +213,7 @@ func (n *NotNullJSON) UnmarshalJSON(data []byte) error {
 	}
 	return nil
 }
+
+func (n NotNullJSON) ToJSON() JSON {
+	return JSON(n)
+}

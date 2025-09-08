@@ -33,6 +33,32 @@ func JsonString(m any) (string, error) {
 	}
 }
 
+func MustJsonString(m any) string {
+	a, _ := JsonString(m)
+	return a
+}
+
+func JsonPrettyString(m any) (string, error) {
+	if m == nil {
+		return "", nil
+	}
+	bs, err := json.Marshal(m)
+	if err != nil {
+		return "", err
+	}
+	buf := new(bytes.Buffer)
+	if err = json.Indent(buf, bs, "", "  "); err != nil {
+		return string(bs), nil
+	} else {
+		return buf.String(), nil
+	}
+}
+
+func MustJsonPrettyString(m any) string {
+	a, _ := JsonPrettyString(m)
+	return a
+}
+
 func SsToTs[S, T any](transmitter func(S) T, ss ...S) []T {
 	if ss == nil {
 		return nil
