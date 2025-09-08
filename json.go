@@ -217,3 +217,56 @@ func (n *NotNullJSON) UnmarshalJSON(data []byte) error {
 func (n NotNullJSON) ToJSON() JSON {
 	return JSON(n)
 }
+
+type JSONArray[T comparable] []T
+
+func NewJSONArray[T comparable](data JSON) (ja JSONArray[T], err error) {
+	if data.IsNull() {
+		return nil, nil
+	}
+	if err = json.Unmarshal(data, &ja); err != nil {
+		return nil, err
+	}
+	return ja, nil
+}
+
+func (ja JSONArray[T]) ToArray() []T {
+	return ja
+}
+
+func (ja JSONArray[T]) Index(v T) int {
+	for i, value := range ja {
+		if value == v {
+			return i
+		}
+	}
+	return -1
+}
+
+func (ja JSONArray[T]) ToJSON() (JSON, error) {
+	if ja == nil {
+		return nil, nil
+	}
+	return JSONBuilder{}.FromObj(ja)
+}
+
+func (ja JSONArray[T]) ToNotNullJSON() (NotNullJSON, error) {
+	jaa := ja
+	if ja == nil {
+		jaa = []T{}
+	}
+	js, err := JSONBuilder{}.FromObj(jaa)
+	return NotNullJSON(js), err
+}
+
+func (ja JSONArray[T]) MarshalJSON() ([]byte, error) {
+	s, err := JsonString([]T(ja))
+	if err != nil {
+		return nil, err
+	}
+	return []byte(s), nil
+}
+
+func (ja JSONArray[T]) Equal(jt JSONArray[T]) bool {
+	return (KS[T])(ja).Equal((KS[T])(jt))
+}
