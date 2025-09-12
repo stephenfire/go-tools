@@ -1,9 +1,199 @@
 package tools
 
 import (
+	"bufio"
+	"encoding/json"
+	"errors"
+	"io"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"unicode"
 )
+
+type S string
+
+func (s S) IsValid() bool {
+	return s != ""
+}
+
+func (s S) Trim() S {
+	return S(strings.TrimSpace(string(s)))
+}
+
+func (s S) ToLower() S {
+	return S(strings.ToLower(string(s)))
+}
+
+func (s S) ToUpper() S {
+	return S(strings.ToUpper(string(s)))
+}
+
+func (s S) Replace(source, target string) S {
+	return S(strings.ReplaceAll(string(s), source, target))
+}
+
+func (s S) Formalize() S {
+	return S(strings.ToLower(strings.TrimSpace(string(s))))
+}
+
+func (s S) CamelToSnake() S {
+	if len(s) == 0 {
+		return ""
+	}
+	var rs []rune
+	for i, r := range s {
+		if unicode.IsUpper(r) {
+			if i > 0 {
+				if len(rs) > 0 && rs[len(rs)-1] != '_' {
+					rs = append(rs, '_')
+				}
+			}
+			rs = append(rs, unicode.ToLower(r))
+		} else {
+			rs = append(rs, r)
+		}
+	}
+	return S(rs)
+}
+
+func (s S) Includes(ss ...string) bool {
+	str := string(s)
+	for _, one := range ss {
+		if one == "" {
+			continue
+		}
+		if !strings.Contains(str, one) {
+			return false
+		}
+	}
+	return true
+}
+
+func (s S) SplitBy(sep string) []string {
+	return strings.Split(string(s), sep)
+}
+
+func (s S) RegexpSplit(expr string) ([]string, error) {
+	reg, err := regexp.Compile(expr)
+	if err != nil {
+		return nil, err
+	}
+	return reg.Split(string(s), -1), nil
+}
+
+func (s S) CSVSplit() []string {
+	reg := regexp.MustCompile("[,，、]")
+	return reg.Split(string(s), -1)
+}
+
+func (s S) String() string {
+	return string(s)
+}
+
+func (s S) Bytes() []byte {
+	return []byte(s)
+}
+
+func (s S) FirstByte() byte {
+	bs := []byte(s)
+	if len(bs) > 0 {
+		return bs[0]
+	}
+	return 0
+}
+
+func (s S) Int64() (int64, error) {
+	ss := s.Trim().String()
+	return strconv.ParseInt(ss, 10, 64)
+}
+
+func (s S) CSVLike() string {
+	return "%," + string(s) + ",%"
+}
+
+func (s S) Like() string {
+	return "%" + string(s) + "%"
+}
+
+func (s S) ID() (ID, error) {
+	var i int64
+	ss := s.Trim().Bytes()
+	for _, sss := range ss {
+		if sss >= '0' && sss <= '9' {
+			i *= 10
+			i += int64(sss - '0')
+		} else {
+			return 0, errors.New("invalid id string")
+		}
+	}
+	return ID(i), nil
+}
+
+func (s S) MustID() ID {
+	i, err := s.ID()
+	if err != nil {
+		return 0
+	}
+	return i
+}
+
+func (s S) JSON() (JSON, error) {
+	var j *JSON
+	err := json.Unmarshal(s.Bytes(), &j)
+	if err != nil {
+		return nil, err
+	}
+	if j == nil {
+		return nil, nil
+	}
+	return *j, nil
+}
+
+func (s S) SplitLines() (SS, error) {
+	if len(s) == 0 {
+		return nil, nil
+	}
+	rd := bufio.NewReader(strings.NewReader(string(s)))
+	var ss SS
+	var oneline []byte
+	for {
+		line, prefixing, err := rd.ReadLine()
+		if err != nil {
+			if err == io.EOF {
+				break
+			} else {
+				return nil, err
+			}
+		}
+		oneline = append(oneline, line...)
+		if !prefixing {
+			ss = append(ss, string(oneline))
+			if len(oneline) > 0 {
+				oneline = oneline[:0]
+			}
+		}
+	}
+	if len(oneline) > 0 {
+		ss = append(ss, string(oneline))
+	}
+	return ss, nil
+}
+
+func (s S) FirstRune() rune {
+	if len(s) == 0 {
+		return 0
+	}
+	return []rune(s)[0]
+}
+
+func (s S) FirstRuneString() S {
+	if len(s) == 0 {
+		return ""
+	}
+	return S([]rune(s)[0])
+}
 
 type SS []string
 
