@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"iter"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -373,17 +375,23 @@ func (km KMap[K, V]) Keys(filters ...func(k K, v V) bool) []K {
 }
 
 func (km KMap[K, V]) Values(filters ...func(k K, v V) bool) []V {
-	var filter func(k K, v V) bool
-	if len(filters) > 0 && filters[0] != nil {
-		filter = filters[0]
-	}
-	var rs []V
-	for k, v := range km {
-		if filter == nil || filter(k, v) {
-			rs = append(rs, v)
+	return slices.Collect(km.ValuesSeq(filters...))
+}
+
+func (km KMap[K, V]) ValuesSeq(filters ...func(k K, v V) bool) iter.Seq[V] {
+	return func(yield func(V) bool) {
+		var filter func(k K, v V) bool
+		if len(filters) > 0 && filters[0] != nil {
+			filter = filters[0]
+		}
+		for k, v := range km {
+			if filter == nil || filter(k, v) {
+				if !yield(v) {
+					return
+				}
+			}
 		}
 	}
-	return rs
 }
 
 func (km KMap[K, V]) List(keys ...K) []V {
@@ -624,6 +632,16 @@ func (km KSet[K]) ExsitingList(ks ...K) []K {
 
 type KS[K comparable] []K
 
+func (ks KS[K]) All() iter.Seq[K] {
+	return func(yield func(K) bool) {
+		for _, k := range ks {
+			if !yield(k) {
+				return
+			}
+		}
+	}
+}
+
 func (ks KS[K]) Dedup(validators ...func(k K) bool) KS[K] {
 	if len(ks) == 0 {
 		return nil
@@ -704,13 +722,25 @@ func (ks KS[K]) DedupRange(one func(k K) error) error {
 	return nil
 }
 
-func (ks KS[K]) Map() KSet[K] {
+func (ks KS[K]) Map(validators ...func(k K) bool) KSet[K] {
 	if len(ks) == 0 {
 		return nil
 	}
+	var validate func(k K) bool
+	if len(validators) > 0 && validators[0] != nil {
+		validate = validators[0]
+	}
 	m := make(KSet[K], len(ks))
-	for _, k := range ks {
-		m[k] = struct{}{}
+	if validate == nil {
+		for _, k := range ks {
+			m[k] = struct{}{}
+		}
+	} else {
+		for _, k := range ks {
+			if validate(k) {
+				m[k] = struct{}{}
+			}
+		}
 	}
 	return m
 }
