@@ -49,7 +49,7 @@ func (j JSON) IsNull() bool {
 func (j *JSON) Scan(value interface{}) error {
 	bs, ok := value.([]byte)
 	if !ok {
-		return fmt.Errorf("failed to unmarshal JSON value: %x", value)
+		return errors.New("tools: JSON scan source was not []byte")
 	}
 
 	result := json.RawMessage{}
@@ -140,7 +140,7 @@ func (n NotNullJSON) IsNull() bool {
 func (n *NotNullJSON) Scan(value interface{}) error {
 	bs, ok := value.([]byte)
 	if !ok {
-		return fmt.Errorf("failed to unmarshal NotNullJSON value: %x", value)
+		return errors.New("tools: JSON scan source was not []byte")
 	}
 
 	result := json.RawMessage{}
@@ -189,7 +189,7 @@ func (n *NotNullJSON) Clone() NotNullJSON {
 
 func (n NotNullJSON) MarshalJSON() ([]byte, error) {
 	if len(n) == 0 {
-		return nil, errors.New(`NotNullJSON with null value`)
+		return nil, ErrNilValue
 	}
 	return n, nil
 }
@@ -201,13 +201,13 @@ func (n *NotNullJSON) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if result == nil {
-		return errors.New(`NotNullJSON could not be null`)
+		return ErrNilSource
 	} else {
 		buf := new(bytes.Buffer)
-		_ = json.Compact(buf, *result)
+		err = json.Compact(buf, *result)
 		bs := buf.Bytes()
 		if len(bs) == 0 {
-			return errors.New(`NotNullJSON could not be null`)
+			return fmt.Errorf("%w, compact json with error: %w", ErrNilSource, err)
 		}
 		*n = bs
 	}

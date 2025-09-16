@@ -127,7 +127,7 @@ func (s S) ID() (ID, error) {
 			i *= 10
 			i += int64(sss - '0')
 		} else {
-			return 0, errors.New("invalid id string")
+			return 0, errors.New("tools: invalid id string")
 		}
 	}
 	return ID(i), nil

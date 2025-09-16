@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
@@ -10,9 +11,8 @@ import (
 )
 
 var (
-	ErrNilSource       = errors.New("source value is nil")
-	ErrNilDest         = errors.New("destination value is nil")
-	ErrUnsupportedScan = errors.New("unsupported scan")
+	ErrNilSource = errors.New("tools: nil source value")
+	ErrNilValue  = errors.New("tools: nil value")
 )
 
 // Time mysql timestamp precision to seconds
@@ -148,7 +148,7 @@ func (t *Time) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if i == nil {
-		return errors.New(`Time could not be null`)
+		return ErrNilSource
 	} else {
 		*t = NewUnixTime(*i)
 	}
@@ -165,16 +165,120 @@ func (t *Time) Scan(value any) error {
 	} else {
 		if v, ok := value.(time.Time); ok {
 			if t == nil {
-				return ErrNilDest
+				return ErrNilValue
 			}
 			*t = Time(v)
 			return nil
 		} else {
-			return ErrUnsupportedScan
+			return errors.New("tools: Time scan source was not time.Time")
 		}
 	}
 }
 
 func (t Time) Value() (driver.Value, error) {
 	return time.Time(t).Truncate(TimeTruncater), nil
+}
+
+type NullTime sql.NullTime
+
+var _nulltime = NullTime{
+	Time:  NewUnixTime(0).Time(),
+	Valid: false,
+}
+
+func NewNullTime(t ...time.Time) NullTime {
+	if len(t) <= 0 || t[0].IsZero() {
+		return _nulltime
+	} else {
+		return NullTime{
+			Time:  NewTime(t[0]).Time(),
+			Valid: true,
+		}
+	}
+}
+
+func NewNullUnixTime(ut int64) NullTime {
+	if ut <= 0 {
+		return _nulltime
+	} else {
+		return NullTime{
+			Time:  NewUnixTime(ut).Time(),
+			Valid: true,
+		}
+	}
+}
+
+func (n NullTime) IsNull() bool {
+	return !n.Valid
+}
+
+func (n *NullTime) Scan(value any) error {
+	return (*sql.NullTime)(n).Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (n NullTime) Value() (driver.Value, error) {
+	if !n.Valid {
+		return nil, nil
+	}
+	return n.Time.Truncate(time.Second), nil
+}
+
+func (n NullTime) ToTime() Time {
+	if !n.Valid {
+		return ZeroTime()
+	}
+	return NewTime(n.Time)
+}
+
+func (n NullTime) Obj() time.Time {
+	return n.Time
+}
+
+func (n NullTime) Compare(ti time.Time) int {
+	if !n.Valid {
+		return -1
+	}
+	return n.Time.Compare(ti)
+}
+
+func (n NullTime) Format(layout string) string {
+	if !n.Valid {
+		return "<nil>"
+	}
+	return n.Time.Format(layout)
+}
+
+func (n NullTime) String() string {
+	if n.Valid {
+		return Time(n.Time).String()
+	}
+	return ""
+}
+
+func (n NullTime) MarshalJSON() ([]byte, error) {
+	if n.Valid {
+		return json.Marshal(n.Time.UnixMilli())
+	}
+	return []byte("null"), nil
+}
+
+func (n *NullTime) UnmarshalJSON(data []byte) error {
+	var i *int64
+	if err := json.Unmarshal(data, &i); err != nil {
+		return err
+	}
+	if i == nil {
+		*n = _nulltime
+	} else {
+		*n = NewNullUnixTime(*i)
+	}
+	return nil
+}
+
+func (n NullTime) Equal(o NullTime) bool {
+	if n.Valid != o.Valid {
+		return false
+	}
+	return n.Time.UnixMilli() == o.Time.UnixMilli()
 }

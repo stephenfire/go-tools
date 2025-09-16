@@ -23,7 +23,7 @@ func IsByteSlice(typ reflect.Type) bool {
 func SetByteSliceValue(val reflect.Value, bs []byte) error {
 	if len(bs) > val.Cap() {
 		if !val.CanSet() {
-			return errors.New("byte slice value cannot set")
+			return errors.New("tools: byte slice value cannot set")
 		}
 		val.Set(reflect.MakeSlice(val.Type(), len(bs), len(bs)))
 	} else {
