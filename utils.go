@@ -90,3 +90,10 @@ func IF[T any](condition bool, trueValue T, falseValue T) T {
 	}
 	return falseValue
 }
+
+func Abs[I ~int | ~int8 | ~int16 | ~int32 | ~int64](i I) I {
+	if i < 0 {
+		return -i
+	}
+	return i
+}
