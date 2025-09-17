@@ -338,6 +338,17 @@ func (km KMap[K, V]) Merge(kmo KMap[K, V]) KMap[K, V] {
 	return km
 }
 
+func (km KMap[K, V]) Puts(it iter.Seq2[K, V]) KMap[K, V] {
+	m := km
+	for k, v := range it {
+		if m == nil {
+			m = make(map[K]V)
+		}
+		m[k] = v
+	}
+	return m
+}
+
 func (km KMap[K, V]) Delete(ks ...K) {
 	if len(km) == 0 {
 		return
@@ -550,6 +561,17 @@ func (km KSet[K]) AppendSet(s KSet[K]) KSet[K] {
 		km[k] = struct{}{}
 	}
 	return km
+}
+
+func (km KSet[K]) Appends(it iter.Seq[K]) KSet[K] {
+	m := km
+	for k := range it {
+		if m == nil {
+			m = make(map[K]struct{})
+		}
+		m[k] = struct{}{}
+	}
+	return m
 }
 
 func (km KSet[K]) CAS(k K) (set KSet[K], changed bool) {

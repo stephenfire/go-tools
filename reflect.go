@@ -40,3 +40,34 @@ func IsDefaultZero[T any](t T) bool {
 	}
 	return val.IsZero()
 }
+
+func IndirectType(typ reflect.Type) reflect.Type {
+	for {
+		if typ.Kind() == reflect.Pointer {
+			typ = typ.Elem()
+		} else {
+			return typ
+		}
+	}
+}
+
+func IndirectValue(val reflect.Value) reflect.Value {
+	for {
+		if val.Kind() == reflect.Pointer {
+			val = val.Elem()
+		} else {
+			return val
+		}
+	}
+}
+
+func VariadicParam[T any](params []T, defaultValue ...T) T {
+	var defaultVal T
+	if len(defaultValue) > 0 {
+		defaultVal = defaultValue[0]
+	}
+	if len(params) == 0 {
+		return defaultVal
+	}
+	return params[0]
+}
