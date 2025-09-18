@@ -529,6 +529,11 @@ func (kkm KKMap[K1, K2, V]) Range(handler func(k1 K1, k2 K2, v V) (goon bool)) {
 
 type KSet[K comparable] map[K]struct{}
 
+func NewKSet[K comparable](ks ...K) KSet[K] {
+	km := make(KSet[K])
+	return km.Add(ks...)
+}
+
 func (km KSet[K]) Append(ks ...K) KSet[K] {
 	if len(ks) == 0 {
 		return km
@@ -545,6 +550,13 @@ func (km KSet[K]) Append(ks ...K) KSet[K] {
 
 func (km KSet[K]) Add(ks ...K) KSet[K] {
 	for _, k := range ks {
+		km[k] = struct{}{}
+	}
+	return km
+}
+
+func (km KSet[K]) Adds(it iter.Seq[K]) KSet[K] {
+	for k := range it {
 		km[k] = struct{}{}
 	}
 	return km
@@ -591,6 +603,19 @@ func (km KSet[K]) Delete(ks ...K) KSet[K] {
 func (km KSet[K]) IsExist(k K) bool {
 	_, exist := km[k]
 	return exist
+}
+
+// In return a sequence that in both input and current set
+func (km KSet[K]) In(input iter.Seq[K]) iter.Seq[K] {
+	return func(yield func(K) bool) {
+		for k := range input {
+			if km.IsExist(k) {
+				if !yield(k) {
+					return
+				}
+			}
+		}
+	}
 }
 
 func (km KSet[K]) Slice(emptyNil ...bool) []K {
