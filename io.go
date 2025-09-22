@@ -64,3 +64,25 @@ func ValidAndCreateDir(pstr string, checkAndCreateIfAbsent bool) (string, error)
 	}
 	return formatted, nil
 }
+
+func OpenWriteFile(fullFilePathName string) (*os.File, error) {
+	dir := filepath.Dir(fullFilePathName)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, err
+	}
+	out, err := os.Create(fullFilePathName)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func RemoveFile(fullFilePathName string) error {
+	if err := os.Remove(fullFilePathName); err != nil {
+		if os.IsNotExist(err) {
+			return err
+		}
+		return errors.New("tools: file still exists")
+	}
+	return nil
+}

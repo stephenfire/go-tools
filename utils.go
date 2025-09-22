@@ -2,6 +2,7 @@ package tools
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/json"
 )
 
@@ -96,4 +97,10 @@ func Abs[I ~int | ~int8 | ~int16 | ~int32 | ~int64](i I) I {
 		return -i
 	}
 	return i
+}
+
+func RandomBytes(length int) []byte {
+	b := make([]byte, length)
+	_, _ = rand.Read(b)
+	return b
 }
