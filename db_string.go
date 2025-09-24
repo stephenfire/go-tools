@@ -8,6 +8,13 @@ import (
 
 type NullString sql.Null[string]
 
+func NewNullString(s string, valid bool) NullString {
+	return NullString(sql.Null[string]{
+		V:     s,
+		Valid: valid,
+	})
+}
+
 func (n *NullString) Scan(value any) error {
 	return (*sql.Null[string])(n).Scan(value)
 }

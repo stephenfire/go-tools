@@ -138,6 +138,10 @@ func (t Time) Time() time.Time {
 	return time.Time(t)
 }
 
+func (t Time) Sub(o Time) time.Duration {
+	return time.Time(t).Sub(time.Time(o))
+}
+
 func (t Time) MarshalJSON() ([]byte, error) {
 	return json.Marshal((time.Time)(t).UnixMilli())
 }

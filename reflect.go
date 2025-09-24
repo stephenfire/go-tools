@@ -60,14 +60,3 @@ func IndirectValue(val reflect.Value) reflect.Value {
 		}
 	}
 }
-
-func VariadicParam[T any](params []T, defaultValue ...T) T {
-	var defaultVal T
-	if len(defaultValue) > 0 {
-		defaultVal = defaultValue[0]
-	}
-	if len(params) == 0 {
-		return defaultVal
-	}
-	return params[0]
-}
