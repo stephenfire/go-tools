@@ -3,6 +3,7 @@ package tools
 import (
 	"fmt"
 	"iter"
+	"maps"
 	"slices"
 )
 
@@ -68,21 +69,27 @@ func (km KMap[K, V]) Get(k K) (v V, exist bool) {
 }
 
 func (km KMap[K, V]) Keys(filters ...func(k K, v V) bool) []K {
-	var filter func(k K, v V) bool
-	if len(filters) > 0 && filters[0] != nil {
-		filter = filters[0]
-	}
-	var rs []K
-	for k, v := range km {
-		if filter == nil || filter(k, v) {
-			rs = append(rs, k)
-		}
-	}
-	return rs
+	return slices.Collect(km.KeySeq(filters...))
 }
 
 func (km KMap[K, V]) Values(filters ...func(k K, v V) bool) []V {
 	return slices.Collect(km.ValuesSeq(filters...))
+}
+
+func (km KMap[K, V]) KeySeq(filters ...func(k K, v V) bool) iter.Seq[K] {
+	return func(yield func(K) bool) {
+		var filter func(k K, v V) bool
+		if len(filters) > 0 && filters[0] != nil {
+			filter = filters[0]
+		}
+		for k, v := range km {
+			if filter == nil || filter(k, v) {
+				if !yield(k) {
+					return
+				}
+			}
+		}
+	}
 }
 
 func (km KMap[K, V]) ValuesSeq(filters ...func(k K, v V) bool) iter.Seq[V] {
@@ -312,6 +319,10 @@ func (km KSet[K]) In(input iter.Seq[K]) iter.Seq[K] {
 			}
 		}
 	}
+}
+
+func (km KSet[K]) Keys() iter.Seq[K] {
+	return maps.Keys(km)
 }
 
 func (km KSet[K]) Slice(emptyNil ...bool) []K {
