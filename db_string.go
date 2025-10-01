@@ -15,6 +15,13 @@ func NewNullString(s string, valid bool) NullString {
 	})
 }
 
+func EmptyNullString(s string) NullString {
+	return NullString{
+		V:     s,
+		Valid: s != "",
+	}
+}
+
 func (n *NullString) Scan(value any) error {
 	return (*sql.Null[string])(n).Scan(value)
 }

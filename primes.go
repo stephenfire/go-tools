@@ -110,6 +110,11 @@ func (s S) Int64() (int64, error) {
 	return strconv.ParseInt(ss, 10, 64)
 }
 
+func (s S) Float64() (float64, error) {
+	ss := s.Trim().String()
+	return strconv.ParseFloat(ss, 64)
+}
+
 func (s S) CSVLike() string {
 	return "%," + string(s) + ",%"
 }

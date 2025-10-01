@@ -21,9 +21,10 @@ var (
 type Time time.Time
 
 const (
-	TimeTruncater     = time.Millisecond
-	DefaultTimeFormat = "2006-01-02 15:04:05 MST"
-	TimeFormatWithMS  = "2006-01-02 15:04:05.000 MST"
+	TimeTruncater      = time.Millisecond
+	DefaultTimeFormat  = "2006-01-02 15:04:05 MST"
+	TimeFormatWithMS   = "2006-01-02 15:04:05.000 MST"
+	DefaultParseLayout = "2006-01-02 15:04:05"
 )
 
 func NewFullDate(year int, month time.Month, day, hour, min, sec, nsec int, loc *time.Location) Time {
@@ -43,6 +44,14 @@ func NewUnixTime(ts int64) Time {
 		return Time(time.UnixMilli(ts).Truncate(TimeTruncater))
 	}
 	return Time(time.Unix(ts, 0).Truncate(TimeTruncater))
+}
+
+func ParseTime(layout, value string) (Time, error) {
+	t, err := time.Parse(layout, value)
+	if err != nil {
+		return Time{}, err
+	}
+	return Time(t.Truncate(TimeTruncater)), nil
 }
 
 // ZeroTime according to time.Time document, which is Jan 1 year 1.
@@ -183,6 +192,10 @@ func (t Time) Value() (driver.Value, error) {
 	return time.Time(t).Truncate(TimeTruncater), nil
 }
 
+func (t Time) ToNullTime() NullTime {
+	return NullTime{Time: t.Time(), Valid: true}
+}
+
 type NullTime sql.NullTime
 
 var _nulltime = NullTime{
@@ -210,6 +223,14 @@ func NewNullUnixTime(ut int64) NullTime {
 			Valid: true,
 		}
 	}
+}
+
+func ParseNullTime(layout, value string) NullTime {
+	t, err := ParseTime(layout, value)
+	if err != nil {
+		return _nulltime
+	}
+	return t.ToNullTime()
 }
 
 func (n NullTime) IsNull() bool {

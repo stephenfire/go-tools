@@ -66,6 +66,13 @@ func (i NullInt32) String() string {
 
 type NullInt64 sql.NullInt64
 
+func NewNullInt64(i int64, valid bool) NullInt64 {
+	return NullInt64{
+		Int64: 0,
+		Valid: valid,
+	}
+}
+
 // LE0NullInt64 Less or Equal to 0 is Null, or not Null
 func LE0NullInt64(i int64) NullInt64 {
 	if i <= 0 {
