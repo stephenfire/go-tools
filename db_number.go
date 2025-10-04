@@ -68,7 +68,7 @@ type NullInt64 sql.NullInt64
 
 func NewNullInt64(i int64, valid bool) NullInt64 {
 	return NullInt64{
-		Int64: 0,
+		Int64: i,
 		Valid: valid,
 	}
 }
