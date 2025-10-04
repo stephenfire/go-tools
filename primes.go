@@ -509,6 +509,26 @@ func (ks KS[K]) Append(k K) KS[K] {
 	return append(ks, k)
 }
 
+func (ks KS[K]) NotIn(e Exister[K]) KS[K] {
+	var ret KS[K]
+	for _, k := range ks {
+		if !e.IsExist(k) {
+			ret = append(ret, k)
+		}
+	}
+	return ret
+}
+
+func (ks KS[K]) In(e Exister[K]) KS[K] {
+	var ret KS[K]
+	for _, k := range ks {
+		if e.IsExist(k) {
+			ret = append(ret, k)
+		}
+	}
+	return ret
+}
+
 type KV[K comparable, V any] struct{}
 
 func (KV[K, V]) OneOfMap(k K, mapper func([]K) (map[K]V, error)) (v V, err error) {

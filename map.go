@@ -7,6 +7,10 @@ import (
 	"slices"
 )
 
+type Exister[K comparable] interface {
+	IsExist(k K) bool
+}
+
 type KMap[K comparable, V any] map[K]V
 
 func (km KMap[K, V]) Map() map[K]V {
