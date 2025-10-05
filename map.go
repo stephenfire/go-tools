@@ -149,6 +149,27 @@ func (km KMap[K, V]) SubMap(ks ...K) KMap[K, V] {
 	return m
 }
 
+func (km KMap[K, V]) RangeSubMap(batchSize int, ranger func(m KMap[K, V]) bool) {
+	if len(km) == 0 {
+		return
+	}
+	if len(km) <= batchSize {
+		ranger(km)
+		return
+	}
+	sub := make(KMap[K, V], batchSize)
+	for k, v := range km {
+		sub[k] = v
+		if len(sub) >= batchSize {
+			ranger(sub)
+			sub = make(KMap[K, V], batchSize)
+		}
+	}
+	if len(sub) > 0 {
+		ranger(sub)
+	}
+}
+
 type KKMap[K1 comparable, K2 comparable, V any] map[K1]map[K2]V
 
 func (kkm KKMap[K1, K2, V]) Put(k1 K1, k2 K2, v V) KKMap[K1, K2, V] {

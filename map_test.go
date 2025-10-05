@@ -2,6 +2,7 @@ package tools
 
 import (
 	"fmt"
+	"maps"
 	"math/rand"
 	"slices"
 	"testing"
@@ -51,5 +52,32 @@ func TestOrderMap(t *testing.T) {
 		m.Del(k)
 		ts = append(ts[:r], ts[r+1:]...)
 		check(ts)
+	}
+}
+
+func TestKMap_RangeSubMap(t *testing.T) {
+	var km KMap[int, int]
+	size := 1000
+	for i := 0; i < size; i++ {
+		j := rand.Intn(99999)
+		km = km.Put(i, j)
+	}
+	if len(km) != size {
+		t.Fatal(fmt.Errorf("len(km)!=size"))
+	}
+
+	var tm KMap[int, int]
+	km.RangeSubMap(17, func(m KMap[int, int]) bool {
+		tm = tm.Merge(m)
+		t.Logf("len(tm)=%d", len(tm))
+		return true
+	})
+
+	if len(tm) != size {
+		t.Fatal(fmt.Errorf("len(tm)!=size"))
+	}
+
+	if !maps.Equal(tm, km) {
+		t.Fatal(fmt.Errorf("tm!=km"))
 	}
 }
