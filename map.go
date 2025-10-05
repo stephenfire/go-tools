@@ -162,7 +162,9 @@ func (km KMap[K, V]) RangeSubMap(batchSize int, ranger func(m KMap[K, V]) bool) 
 	for k, v := range km {
 		sub[k] = v
 		if len(sub) >= batchSize {
-			ranger(sub)
+			if !ranger(sub) {
+				return
+			}
 			sub = make(KMap[K, V], batchSize)
 		}
 	}
