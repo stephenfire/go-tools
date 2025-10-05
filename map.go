@@ -409,6 +409,14 @@ func (km KSet[K]) ExsitingList(ks ...K) []K {
 	return ret
 }
 
+func (km KSet[K]) RangeSubSet(batchSize int, ranger func(s KSet[K]) bool) {
+	KMap[K, struct{}](km).RangeSubMap(batchSize, func(m KMap[K, struct{}]) bool {
+		s := make(KSet[K])
+		s.Appends(maps.Keys(m))
+		return ranger(s)
+	})
+}
+
 // OrderMap 一个按插入顺序遍历的map，也可以通过给出的排序器顺序遍历。线程不安全。
 type OrderMap[K comparable, V any] struct {
 	m map[K]V

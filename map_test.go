@@ -67,9 +67,17 @@ func TestKMap_RangeSubMap(t *testing.T) {
 	}
 
 	var tm KMap[int, int]
-	km.RangeSubMap(17, func(m KMap[int, int]) bool {
+	lastLen := 0
+	batchSize := 17
+	km.RangeSubMap(batchSize, func(m KMap[int, int]) bool {
 		tm = tm.Merge(m)
-		t.Logf("len(tm)=%d", len(tm))
+		if len(m) > batchSize || len(m) == 0 {
+			t.Fatal(fmt.Errorf("len(m)=%d, (batchSize=%d)", len(m), batchSize))
+		}
+		if (len(tm) - lastLen) != len(m) {
+			t.Fatal(fmt.Errorf("duplicated key found, len(m)=%d, len(tm)=%d, lastLen=%d", len(m), len(tm), lastLen))
+		}
+		lastLen = len(tm)
 		return true
 	})
 
@@ -79,5 +87,43 @@ func TestKMap_RangeSubMap(t *testing.T) {
 
 	if !maps.Equal(tm, km) {
 		t.Fatal(fmt.Errorf("tm!=km"))
+	}
+}
+
+func TestKSet_RangeSubSet(t *testing.T) {
+	var ks KSet[int]
+	size := 1000
+	ks = ks.Appends(func(yield func(int) bool) {
+		for i := 0; i < size; i++ {
+			if !yield(i) {
+				return
+			}
+		}
+	})
+
+	if len(ks) != size {
+		t.Fatal(fmt.Errorf("len(ks)!=size"))
+	}
+
+	var ts KSet[int]
+	lastLen := 0
+	batchSize := 17
+	ks.RangeSubSet(batchSize, func(s KSet[int]) bool {
+		ts = ts.AppendSet(s)
+		if len(s) > batchSize || len(s) == 0 {
+			t.Fatal(fmt.Errorf("len(s)=%d, (batchSize=%d)", len(s), batchSize))
+		}
+		if (len(ts) - lastLen) != len(s) {
+			t.Fatal(fmt.Errorf("duplicated key found, len(s)=%d, len(ts)=%d, lastLen=%d", len(s), len(ts), lastLen))
+		}
+		lastLen = len(ts)
+		return true
+	})
+
+	if len(ts) != size {
+		t.Fatal(fmt.Errorf("len(ts)!=size"))
+	}
+	if !maps.Equal(ts, ks) {
+		t.Fatal(fmt.Errorf("ts!=tm"))
 	}
 }
