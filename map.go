@@ -30,13 +30,14 @@ func (km KMap[K, V]) Merge(kmo KMap[K, V]) KMap[K, V] {
 	if len(kmo) == 0 {
 		return km
 	}
-	if len(km) == 0 {
-		return kmo
+	m := km
+	if m == nil {
+		m = make(KMap[K, V])
 	}
 	for k, v := range kmo {
-		km[k] = v
+		m[k] = v
 	}
-	return km
+	return m
 }
 
 func (km KMap[K, V]) Puts(it iter.Seq2[K, V]) KMap[K, V] {
