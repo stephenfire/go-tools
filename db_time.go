@@ -24,7 +24,10 @@ const (
 	TimeTruncater      = time.Millisecond
 	DefaultTimeFormat  = "2006-01-02 15:04:05 MST"
 	TimeFormatWithMS   = "2006-01-02 15:04:05.000 MST"
-	DefaultParseLayout = "2006-01-02 15:04:05"
+	DefaultParseLayout = time.DateTime
+
+	DateTruncater     = 24 * time.Hour
+	DefaultDateFormat = time.DateOnly
 )
 
 func NewFullDate(year int, month time.Month, day, hour, min, sec, nsec int, loc *time.Location) Time {
@@ -47,7 +50,7 @@ func NewUnixTime(ts int64) Time {
 }
 
 func ParseTime(layout, value string) (Time, error) {
-	t, err := time.Parse(layout, value)
+	t, err := time.ParseInLocation(layout, value, time.Local)
 	if err != nil {
 		return Time{}, err
 	}
@@ -196,6 +199,15 @@ func (t Time) ToNullTime() NullTime {
 	return NullTime{Time: t.Time(), Valid: true}
 }
 
+func (t Time) Year() int         { return time.Time(t).Year() }
+func (t Time) Month() time.Month { return time.Time(t).Month() }
+func (t Time) Day() int          { return time.Time(t).Day() }
+
+func (t Time) ToDate() Date {
+	// 不使用Time.Truncate方法，避免因时区问题导致日期变化
+	return Date(NewDate(t.Year(), t.Month(), t.Day(), 0, 0, 0))
+}
+
 type NullTime sql.NullTime
 
 var _nulltime = NullTime{
@@ -306,4 +318,55 @@ func (n NullTime) Equal(o NullTime) bool {
 		return false
 	}
 	return n.Time.UnixMilli() == o.Time.UnixMilli()
+}
+
+type Date time.Time
+
+func NewADate(year int, month time.Month, day int) Date {
+	t := NewDate(year, month, day, 0, 0, 0)
+	d := t.ToDate()
+	return d
+}
+
+func (d Date) String() string {
+	return time.Time(d).Format(DefaultDateFormat)
+}
+
+func (d Date) Formalize() Date { return Time(d).ToDate() }
+
+func (d Date) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.String())
+}
+
+func (d *Date) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	t, err := ParseTime(DefaultDateFormat, s)
+	if err != nil {
+		return err
+	}
+	*d = t.ToDate()
+	return nil
+}
+
+func (d *Date) Scan(value any) error {
+	if value == nil {
+		return ErrNilSource
+	} else {
+		if v, ok := value.(time.Time); ok {
+			if d == nil {
+				return ErrNilValue
+			}
+			*d = Date(v)
+			return nil
+		} else {
+			return errors.New("tools: Date scan source was not time.Time")
+		}
+	}
+}
+
+func (d Date) Value() (driver.Value, error) {
+	return time.Time(d).Truncate(DateTruncater), nil
 }
