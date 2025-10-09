@@ -31,7 +31,7 @@ const (
 )
 
 func NewFullDate(year int, month time.Month, day, hour, min, sec, nsec int, loc *time.Location) Time {
-	return Time(time.Date(year, month, day, hour, min, sec, nsec, loc))
+	return Time(time.Date(year, month, day, hour, min, sec, nsec, loc).Truncate(TimeTruncater))
 }
 
 func NewDate(year int, month time.Month, day, hour, min, sec int) Time {
@@ -322,10 +322,12 @@ func (n NullTime) Equal(o NullTime) bool {
 
 type Date time.Time
 
-func NewADate(year int, month time.Month, day int) Date {
-	t := NewDate(year, month, day, 0, 0, 0)
-	d := t.ToDate()
-	return d
+func NewADate(year int, month time.Month, day int, loc ...*time.Location) Date {
+	if location := VariadicParam(loc, time.Local); location != nil {
+		return Date(NewFullDate(year, month, day, 0, 0, 0, 0, location))
+	} else {
+		return Date(NewDate(year, month, day, 0, 0, 0))
+	}
 }
 
 func (d Date) String() string {
@@ -367,6 +369,10 @@ func (d *Date) Scan(value any) error {
 	}
 }
 
+func (d Date) ToTime() time.Time {
+	return time.Time(d)
+}
+
 func (d Date) Value() (driver.Value, error) {
-	return time.Time(d).Truncate(DateTruncater), nil
+	return d.Formalize().ToTime(), nil
 }
