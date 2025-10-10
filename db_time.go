@@ -70,6 +70,10 @@ func (t Time) IsZero() bool {
 	return time.Time(t).IsZero()
 }
 
+func (t Time) AddDate(year, month, day int) Time {
+	return Time(time.Time(t).AddDate(year, month, day))
+}
+
 func (t Time) After(d time.Duration) Time {
 	return Time(time.Time(t).Add(d))
 }
