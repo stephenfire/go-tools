@@ -66,7 +66,7 @@ func BatchCall[T any](op func([]T) bool, batchSize int, ts ...T) {
 	if batchSize <= 0 {
 		batchSize = 100
 	}
-	if len(ts) < batchSize {
+	if len(ts) <= batchSize {
 		op(ts)
 		return
 	}
