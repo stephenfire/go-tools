@@ -8,6 +8,10 @@ import (
 
 type NullInt32 sql.NullInt32
 
+func NewNullInt32(i int32) NullInt32 {
+	return NullInt32{Int32: i, Valid: true}
+}
+
 // LE0NullInt32 Less or Equal 0 is Null, or not Null
 func LE0NullInt32(i int32) NullInt32 {
 	if i <= 0 {
@@ -66,10 +70,10 @@ func (i NullInt32) String() string {
 
 type NullInt64 sql.NullInt64
 
-func NewNullInt64(i int64, valid bool) NullInt64 {
+func NewNullInt64(i int64) NullInt64 {
 	return NullInt64{
 		Int64: i,
-		Valid: valid,
+		Valid: true,
 	}
 }
 
