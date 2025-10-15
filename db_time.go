@@ -373,8 +373,8 @@ func (d *Date) Scan(value any) error {
 	}
 }
 
-func (d Date) ToTime() time.Time {
-	return time.Time(d)
+func (d Date) ToTime() Time {
+	return Time(d)
 }
 
 func (d Date) Value() (driver.Value, error) {
