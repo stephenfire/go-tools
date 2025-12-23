@@ -53,3 +53,22 @@ func RandomBytes(length int) []byte {
 	_, _ = rand.Read(b)
 	return b
 }
+
+func AllMapValueSlices[K comparable, T comparable](m map[K][]T, needDedup ...bool) []T {
+	if len(m) == 0 {
+		return nil
+	}
+	if VariadicParam(needDedup) {
+		idset := make(KSet[T])
+		for _, ids := range m {
+			idset.Add(ids...)
+		}
+		return idset.Slice()
+	} else {
+		var idslice []T
+		for _, ids := range m {
+			idslice = append(idslice, ids...)
+		}
+		return idslice
+	}
+}
