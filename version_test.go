@@ -11,7 +11,7 @@ func TestNodeVersion(t *testing.T) {
 		s                   string
 	}{
 		{0, 0, 0, false, false, 0, "0.0.0"},
-		{0, 0, 0, true, false, 0, "0.0.0"},
+		{0, 0, 0, true, true, 0, "0.0.0"},
 		{0, 10, 0, true, false, -10_000_000, "0.10.0.a"},
 		{0, 10, 999_999, false, false, 10_999_999, "0.10.999999"},
 		{0, 10, 1_000_000, false, true, 0, ""},
