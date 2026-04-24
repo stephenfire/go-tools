@@ -256,23 +256,21 @@ func (ss SS) Clone() SS {
 	return ret
 }
 
+func defaultTransfer(input string) (string, bool) {
+	s := strings.TrimSpace(input)
+	if s != "" {
+		return s, true
+	}
+	return "", false
+}
+
+// Dedup applies transfer to each element, filters out invalid values,
+// keeps the first occurrence order, and returns a new deduplicated slice.
 func (ss SS) Dedup(transfers ...func(input string) (string, bool)) SS {
 	if len(ss) == 0 {
 		return ss
 	}
-	var transfer func(input string) (string, bool)
-	if len(transfers) > 0 && transfers[0] != nil {
-		transfer = transfers[0]
-	} else {
-		transfer = func(input string) (string, bool) {
-			s := strings.TrimSpace(input)
-			if s == "" {
-				return s, true
-			}
-			return "", false
-		}
-	}
-
+	transfer := VariadicParam(transfers, defaultTransfer)
 	var set KSet[string]
 	var ok, changed bool
 	var rr SS
@@ -287,6 +285,34 @@ func (ss SS) Dedup(transfers ...func(input string) (string, bool)) SS {
 		}
 	}
 	return rr
+}
+
+// DedupIn applies transfer and deduplicates elements in place.
+// It rewrites the prefix of ss with unique values in first occurrence order
+// and returns the resulting subslice.
+func (ss SS) DedupIn(transfers ...func(input string) (string, bool)) SS {
+	if len(ss) == 0 {
+		return ss
+	}
+	transfer := VariadicParam(transfers, defaultTransfer)
+	var (
+		i, j        int
+		s           string
+		set         KSet[string]
+		ok, changed bool
+	)
+	for ; i < len(ss); i++ {
+		s, ok = transfer(ss[i])
+		if !ok {
+			continue
+		}
+		set, changed = set.CAS(s)
+		if changed {
+			ss[j] = s
+			j++
+		}
+	}
+	return ss[:j]
 }
 
 func (ss SS) Has(s string) bool {
