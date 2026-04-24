@@ -1,14 +1,14 @@
 package tools
 
 func VariadicParam[T any](params []T, defaultValue ...T) T {
-	var defaultVal T
+	if len(params) > 0 {
+		return params[0]
+	}
 	if len(defaultValue) > 0 {
-		defaultVal = defaultValue[0]
+		return defaultValue[0]
 	}
-	if len(params) == 0 {
-		return defaultVal
-	}
-	return params[0]
+	var defaultVal T
+	return defaultVal
 }
 
 func CopySlice[T any](src []T) []T {
