@@ -10,38 +10,17 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/skip2/go-qrcode"
 )
-
-func TestEffectiveRecoveryLevel(t *testing.T) {
-	tests := []struct {
-		name                string
-		input               qrcode.RecoveryLevel
-		hasLogo             bool
-		disableForceHighest bool
-		want                qrcode.RecoveryLevel
-	}{
-		{name: "no logo keeps input", input: qrcode.Low, hasLogo: false, disableForceHighest: false, want: qrcode.Low},
-		{name: "logo defaults to highest", input: qrcode.Low, hasLogo: true, disableForceHighest: false, want: qrcode.Highest},
-		{name: "logo can disable force highest", input: qrcode.Medium, hasLogo: true, disableForceHighest: true, want: qrcode.Medium},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := effectiveRecoveryLevel(tc.input, tc.hasLogo, tc.disableForceHighest)
-			if got != tc.want {
-				t.Fatalf("expected %v, got %v", tc.want, got)
-			}
-		})
-	}
-}
 
 func TestGenerateQRCodeWithoutLogo(t *testing.T) {
 	tmp := "."
 	out := filepath.Join(tmp, "plain.png")
 
-	err := GenerateQRCode("hello world", QRCodeRecoveryMedium, 0, 256, out, "", 0)
+	err := GenerateQRCode("hello world", out, QRCodeOptions{
+		Level:   QRCodeRecoveryMedium,
+		Version: 0,
+		Size:    256,
+	})
 	if err != nil {
 		t.Fatalf("GenerateQRCode without logo failed: %v", err)
 	}
@@ -61,38 +40,14 @@ func TestGenerateQRCodeWithLogo(t *testing.T) {
 		t.Fatalf("write logo failed: %v", err)
 	}
 
-	err := GenerateQRCode("hello with logo", QRCodeRecoveryLow, 0, 256, out, logoPath, 0)
-	if err != nil {
-		t.Fatalf("GenerateQRCode with logo failed: %v", err)
-	}
-
-	if _, err = os.Stat(out); err != nil {
-		t.Fatalf("output file not created: %v", err)
-	}
-}
-
-func TestGenerateQRCodeLogoCoverNeedsLogo(t *testing.T) {
-	err := GenerateQRCode("hello", QRCodeRecoveryMedium, 0, 256, filepath.Join(".", "x.png"), "", 0.2)
-	if err == nil {
-		t.Fatalf("expect error when logo-cover is used without logo")
-	}
-	if !strings.Contains(err.Error(), "logo-cover requires logo") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestGenerateQRCodeWithOptions(t *testing.T) {
-	tmp := "."
-	out := filepath.Join(tmp, "plain-options.png")
-
-	err := GenerateQRCodeWithOptions(out, "", QRCodeOptions{
-		Text:    "hello options",
-		Level:   QRCodeRecoveryMedium,
-		Version: 0,
-		Size:    256,
+	err := GenerateQRCode("hello with logo", out, QRCodeOptions{
+		Level:    QRCodeRecoveryLow,
+		Version:  0,
+		Size:     256,
+		LogoPath: logoPath,
 	})
 	if err != nil {
-		t.Fatalf("GenerateQRCodeWithOptions failed: %v", err)
+		t.Fatalf("GenerateQRCode with logo failed: %v", err)
 	}
 
 	if _, err = os.Stat(out); err != nil {
@@ -101,9 +56,28 @@ func TestGenerateQRCodeWithOptions(t *testing.T) {
 	assertPNGFileDecodable(t, out)
 }
 
+func TestGenerateQRCodeLogoCoverNeedsLogo(t *testing.T) {
+	err := GenerateQRCode("hello", filepath.Join(".", "x.png"), QRCodeOptions{
+		Level:     QRCodeRecoveryMedium,
+		Version:   0,
+		Size:      256,
+		LogoCover: 0.2,
+	})
+	if err == nil {
+		t.Fatalf("expect error when logo-cover is used without logo")
+	}
+	if !strings.Contains(err.Error(), "logo-cover requires logo") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestGenerateQRCodeToWriterWithoutLogo(t *testing.T) {
 	var out bytes.Buffer
-	err := GenerateQRCodeToWriter("hello writer", QRCodeRecoveryMedium, 0, 256, &out, nil, 0)
+	err := GenerateQRCodeToWriter("hello writer", &out, QRCodeOptions{
+		Level:   QRCodeRecoveryMedium,
+		Version: 0,
+		Size:    256,
+	})
 	if err != nil {
 		t.Fatalf("GenerateQRCodeToWriter without logo failed: %v", err)
 	}
@@ -117,6 +91,20 @@ func TestGenerateQRCodeToWriterWithoutLogo(t *testing.T) {
 	}
 }
 
+func TestGenerateQRCodeToWriterNilOutput(t *testing.T) {
+	err := GenerateQRCodeToWriter("hello", nil, QRCodeOptions{
+		Level:   QRCodeRecoveryMedium,
+		Version: 0,
+		Size:    256,
+	})
+	if err == nil {
+		t.Fatalf("expect error when output writer is nil")
+	}
+	if !strings.Contains(err.Error(), "output writer cannot be nil") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestGenerateQRCodeToWriterWithLogo(t *testing.T) {
 	logoData, err := buildTestLogoPNGBytes()
 	if err != nil {
@@ -124,7 +112,12 @@ func TestGenerateQRCodeToWriterWithLogo(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err = GenerateQRCodeToWriter("hello writer with logo", QRCodeRecoveryLow, 0, 256, &out, bytes.NewReader(logoData), 0)
+	err = GenerateQRCodeToWriter("hello writer with logo", &out, QRCodeOptions{
+		Level:      QRCodeRecoveryLow,
+		Version:    0,
+		Size:       256,
+		LogoReader: bytes.NewReader(logoData),
+	})
 	if err != nil {
 		t.Fatalf("GenerateQRCodeToWriter with logo failed: %v", err)
 	}
@@ -138,35 +131,69 @@ func TestGenerateQRCodeToWriterWithLogo(t *testing.T) {
 	}
 }
 
-func TestGenerateQRCodeToWriterLogoCoverNeedsLogo(t *testing.T) {
-	var out bytes.Buffer
-	err := GenerateQRCodeToWriter("hello", QRCodeRecoveryMedium, 0, 256, &out, nil, 0.2)
-	if err == nil {
-		t.Fatalf("expect error when logo-cover is used without logo reader")
+func TestGenerateQRCodeToWriterWithLogoPath(t *testing.T) {
+	tmp := "."
+	logoPath := filepath.Join(tmp, "logo.png")
+	if err := writeTestLogo(logoPath); err != nil {
+		t.Fatalf("write logo failed: %v", err)
 	}
-	if !strings.Contains(err.Error(), "logo-cover requires logo") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
 
-func TestGenerateQRCodeToWriterWithOptions(t *testing.T) {
 	var out bytes.Buffer
-	err := GenerateQRCodeToWriterWithOptions(&out, nil, QRCodeOptions{
-		Text:    "hello writer options",
-		Level:   QRCodeRecoveryMedium,
-		Version: 0,
-		Size:    256,
+	err := GenerateQRCodeToWriter("hello writer with logo path", &out, QRCodeOptions{
+		Level:    QRCodeRecoveryLow,
+		Version:  0,
+		Size:     256,
+		LogoPath: logoPath,
 	})
 	if err != nil {
-		t.Fatalf("GenerateQRCodeToWriterWithOptions failed: %v", err)
+		t.Fatalf("GenerateQRCodeToWriter with logo path failed: %v", err)
 	}
 
 	if out.Len() == 0 {
 		t.Fatalf("output should not be empty")
 	}
+}
 
-	if _, _, err = image.Decode(bytes.NewReader(out.Bytes())); err != nil {
-		t.Fatalf("output should be a decodable image: %v", err)
+func TestGenerateQRCodeLogoSourceConflict(t *testing.T) {
+	tmp := "."
+	logoPath := filepath.Join(tmp, "logo.png")
+	if err := writeTestLogo(logoPath); err != nil {
+		t.Fatalf("write logo failed: %v", err)
+	}
+	logoData, err := os.ReadFile(logoPath)
+	if err != nil {
+		t.Fatalf("read logo failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	err = GenerateQRCodeToWriter("hello", &out, QRCodeOptions{
+		Level:      QRCodeRecoveryMedium,
+		Version:    0,
+		Size:       256,
+		LogoPath:   logoPath,
+		LogoReader: bytes.NewReader(logoData),
+	})
+	if err == nil {
+		t.Fatalf("expect error when LogoPath and LogoReader are both set")
+	}
+	if !strings.Contains(err.Error(), "logo source conflict") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestGenerateQRCodeToWriterLogoCoverNeedsLogo(t *testing.T) {
+	var out bytes.Buffer
+	err := GenerateQRCodeToWriter("hello", &out, QRCodeOptions{
+		Level:     QRCodeRecoveryMedium,
+		Version:   0,
+		Size:      256,
+		LogoCover: 0.2,
+	})
+	if err == nil {
+		t.Fatalf("expect error when logo-cover is used without logo reader")
+	}
+	if !strings.Contains(err.Error(), "logo-cover requires logo") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

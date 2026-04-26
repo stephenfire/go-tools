@@ -23,6 +23,14 @@ const (
 	QRCodeDefaultLogoCover = 0.20
 )
 
+var (
+	ErrMissingText        = errors.New("tools/qr: text is missing")
+	ErrOutputPathEmpty    = errors.New("tools/qr: output path cannot be empty")
+	ErrOutputWriterNil    = errors.New("tools/qr: output writer cannot be nil")
+	ErrLogoSourceConflict = errors.New("tools/qr: logo source conflict")
+	ErrLogoCoverNeedsLogo = errors.New("tools/qr: logo-cover requires logo")
+)
+
 // QRCodeRecoveryLevel is the QR error correction level used by this package's public API.
 type QRCodeRecoveryLevel int
 
@@ -37,189 +45,44 @@ const (
 // cover ratio and requested target ratio.
 const qrcodeCoverRatioTolerance = 0.995
 
-type normalizedQRCodeParams struct {
-	text    string
-	level   qrcode.RecoveryLevel
-	version int
-	size    int
-}
-
 // QRCodeOptions contains common QR generation options shared by file/writer APIs.
-type QRCodeOptions struct {
-	Text  string
-	Level QRCodeRecoveryLevel
+type (
+	QRCodeOptions struct {
+		Level QRCodeRecoveryLevel
 
-	// Version accepts 0..40. 0 means auto-select the minimum valid version.
-	Version int
-	// Size is the output PNG width/height in pixels.
-	Size int
+		// Version accepts 0..40. 0 means auto-select the minimum valid version.
+		Version int
+		// Size is the output PNG width/height in pixels.
+		Size int
 
-	// LogoCover is the requested logo area ratio over QR code area.
-	// When logo is present and LogoCover is 0, QRCodeDefaultLogoCover is used.
-	LogoCover float64
+		// LogoCover is the requested logo area ratio over QR code area.
+		// When logo is present and LogoCover is 0, QRCodeDefaultLogoCover is used.
+		LogoCover float64
 
-	// DisableForceHighestWhenLogo disables the default behavior that upgrades
-	// recovery level to highest when logo is present.
-	DisableForceHighestWhenLogo bool
-}
+		// DisableForceHighestWhenLogo disables the default behavior that upgrades
+		// recovery level to highest when logo is present.
+		DisableForceHighestWhenLogo bool
 
-// normalizeCommonParams validates shared QR inputs used by both file and writer APIs.
-func normalizeCommonParams(text string, level QRCodeRecoveryLevel, version, size int) (normalizedQRCodeParams, error) {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return normalizedQRCodeParams{}, errors.New("missing text: pass non-empty text")
+		// LogoPath is an optional logo image file path.
+		LogoPath string
+		// LogoReader is an optional logo image reader.
+		// Set either LogoPath or LogoReader, not both.
+		LogoReader io.Reader
 	}
 
-	if size <= 0 {
-		return normalizedQRCodeParams{}, fmt.Errorf("invalid size: %d", size)
+	params struct {
+		level      qrcode.RecoveryLevel
+		version    int
+		size       int
+		logoImg    image.Image
+		coverRatio float64
+
+		logoCloser io.Closer
 	}
+)
 
-	if version < 0 || version > 40 {
-		return normalizedQRCodeParams{}, fmt.Errorf("invalid qr-version: %d, allowed values: 0..40", version)
-	}
-
-	nativeLevel, err := toNativeRecoveryLevel(level)
-	if err != nil {
-		return normalizedQRCodeParams{}, err
-	}
-
-	return normalizedQRCodeParams{text: text, level: nativeLevel, version: version, size: size}, nil
-}
-
-// normalizeLogoCover validates logo cover semantics and applies default cover when logo is enabled.
-func normalizeLogoCover(hasLogo bool, logoCover float64, noLogoErr string) (float64, bool, error) {
-	if !hasLogo {
-		if logoCover != 0 {
-			return 0, false, errors.New(noLogoErr)
-		}
-		return 0, false, nil
-	}
-
-	if logoCover == 0 {
-		logoCover = QRCodeDefaultLogoCover
-	}
-	if logoCover <= 0 || logoCover >= 1 {
-		return 0, true, fmt.Errorf("invalid logo-cover: %v, allowed range: (0,1)", logoCover)
-	}
-
-	return logoCover, true, nil
-}
-
-// effectiveRecoveryLevel applies logo-related level policy in one place.
-// By default, logo mode forces highest recovery; callers can opt out.
-func effectiveRecoveryLevel(level qrcode.RecoveryLevel, hasLogo bool, disableForceHighest bool) qrcode.RecoveryLevel {
-	if hasLogo && !disableForceHighest {
-		return qrcode.Highest
-	}
-	return level
-}
-
-// GenerateQRCode generates a QR image file and supports optional center logo overlay.
-//
-// Behavior alignment with referenced CLI:
-// - version range: 0..40, where 0 means auto
-// - when logoPath is set, level is forced to Highest
-// - when logoPath is empty, logoCover must be 0
-// - when logoPath is set and logoCover is 0, default cover ratio is used
-func GenerateQRCode(text string, level QRCodeRecoveryLevel, version, size int, output, logoPath string, logoCover float64) error {
-	return GenerateQRCodeWithOptions(output, logoPath, QRCodeOptions{
-		Text:      text,
-		Level:     level,
-		Version:   version,
-		Size:      size,
-		LogoCover: logoCover,
-	})
-}
-
-// GenerateQRCodeWithOptions generates a QR image file with common options.
-func GenerateQRCodeWithOptions(output, logoPath string, options QRCodeOptions) error {
-	// Normalize output path and ensure parent directory exists.
-	output = strings.TrimSpace(output)
-	if output == "" {
-		return errors.New("output path cannot be empty")
-	}
-	output = filepath.Clean(output)
-
-	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
-		return fmt.Errorf("prepare output dir failed: %w", err)
-	}
-
-	// Render into memory first; persist to disk only after full generation succeeds.
-	var outBuffer bytes.Buffer
-	var err error
-
-	var logoFile *os.File
-	if logoPath != "" {
-		logoFile, err = os.Open(filepath.Clean(logoPath))
-		if err != nil {
-			return fmt.Errorf("open logo file failed: %w", err)
-		}
-		defer func() {
-			_ = logoFile.Close()
-		}()
-	}
-
-	if err = GenerateQRCodeToWriterWithOptions(&outBuffer, logoFile, options); err != nil {
-		return err
-	}
-	if err = os.WriteFile(output, outBuffer.Bytes(), 0o644); err != nil {
-		return fmt.Errorf("write output file failed: %w", err)
-	}
-	return nil
-}
-
-// GenerateQRCodeToWriter generates a QR code PNG to writer with string text input.
-//
-// Behavior alignment with GenerateQRCode:
-// - version range: 0..40, where 0 means auto
-// - when logoReader is set, level is forced to Highest
-// - when logoReader is nil, logoCover must be 0
-// - when logoReader is set and logoCover is 0, default cover ratio is used
-func GenerateQRCodeToWriter(text string, level QRCodeRecoveryLevel, version, size int, output io.Writer, logoReader io.Reader, logoCover float64) error {
-	return GenerateQRCodeToWriterWithOptions(output, logoReader, QRCodeOptions{
-		Text:      text,
-		Level:     level,
-		Version:   version,
-		Size:      size,
-		LogoCover: logoCover,
-	})
-}
-
-// GenerateQRCodeToWriterWithOptions generates a QR code PNG to writer with common options.
-func GenerateQRCodeToWriterWithOptions(output io.Writer, logoReader io.Reader, options QRCodeOptions) error {
-	// Writer-based API mirrors file-based behavior but writes PNG bytes to caller output.
-	if output == nil {
-		return errors.New("output writer cannot be nil")
-	}
-
-	params, err := normalizeCommonParams(options.Text, options.Level, options.Version, options.Size)
-	if err != nil {
-		return err
-	}
-
-	// No logo reader means plain QR mode.
-	cover, hasLogo, err := normalizeLogoCover(logoReader != nil, options.LogoCover, "logo-cover requires logo: pass logo reader")
-	if err != nil {
-		return err
-	}
-	if !hasLogo {
-		return generateWithoutLogoToWriter(params.text, params.level, params.version, params.size, output)
-	}
-
-	// Decode logo image from stream (png/jpeg/gif via registered decoders).
-	logoImg, err := decodeImage(logoReader)
-	if err != nil {
-		return fmt.Errorf("decode logo failed: %w", err)
-	}
-
-	params.level = effectiveRecoveryLevel(params.level, hasLogo, options.DisableForceHighestWhenLogo)
-	return generateWithLogoToWriter(params.text, params.level, params.version, params.size, output, logoImg, cover)
-}
-
-// toNativeRecoveryLevel maps this package's recovery constants to go-qrcode values.
-// Returning an error on unknown values prevents silent fallback behavior in callers.
-func toNativeRecoveryLevel(level QRCodeRecoveryLevel) (qrcode.RecoveryLevel, error) {
-	switch level {
+func (l QRCodeRecoveryLevel) toRecoveryLevel() (qrcode.RecoveryLevel, error) {
+	switch l {
 	case QRCodeRecoveryLow:
 		return qrcode.Low, nil
 	case QRCodeRecoveryMedium:
@@ -229,83 +92,118 @@ func toNativeRecoveryLevel(level QRCodeRecoveryLevel) (qrcode.RecoveryLevel, err
 	case QRCodeRecoveryHighest:
 		return qrcode.Highest, nil
 	default:
-		return qrcode.Medium, fmt.Errorf("invalid recovery level: %d", level)
+		return 0, errors.New("tools/qr: invalid recovery level")
 	}
 }
 
-// generateWithoutLogo renders a plain QR image to file via the shared writer pipeline.
-func generateWithoutLogo(text string, level qrcode.RecoveryLevel, version, size int, output string) error {
-	outFile, err := os.Create(output)
-	if err != nil {
-		return fmt.Errorf("create output file failed: %w", err)
-	}
-	defer func() {
-		_ = outFile.Close()
-	}()
+func (q QRCodeOptions) hasLogo() bool {
+	return q.LogoPath != "" || q.LogoReader != nil
+}
 
-	err = generateWithoutLogoToWriter(text, level, version, size, outFile)
+func (q QRCodeOptions) toParams() (*params, error) {
+	if q.Size <= 0 {
+		return nil, errors.New("tools/qr: size must be greater than zero")
+	}
+	if q.Version < 0 || q.Version > 40 {
+		return nil, errors.New("tools/qr: version allowed value 0..40")
+	}
+	nativeLevel, err := q.Level.toRecoveryLevel()
 	if err != nil {
+		return nil, err
+	}
+
+	ps := &params{level: nativeLevel, version: q.Version, size: q.Size}
+
+	if q.LogoPath != "" && q.LogoReader != nil {
+		return nil, ErrLogoSourceConflict
+	}
+	if q.LogoCover < 0 || q.LogoCover >= 1 {
+		return nil, errors.New("tools/qr: logo cover allowed value 0..1")
+	}
+	if !q.hasLogo() {
+		if q.LogoCover != 0 {
+			return nil, ErrLogoCoverNeedsLogo
+		}
+	} else {
+		// By default, logo mode forces highest recovery; callers can opt out.
+		if !q.DisableForceHighestWhenLogo {
+			ps.level = qrcode.Highest
+		}
+		if q.LogoCover == 0 {
+			ps.coverRatio = QRCodeDefaultLogoCover
+		} else {
+			ps.coverRatio = q.LogoCover
+		}
+		logoReader := q.LogoReader
+		if q.LogoPath != "" {
+			logoFile, err := os.Open(filepath.Clean(q.LogoPath))
+			if err != nil {
+				return nil, fmt.Errorf("tools/qr: open logo file failed: %w", err)
+			}
+			ps.logoCloser = logoFile
+			logoReader = logoFile
+		}
+		ps.logoImg, _, err = image.Decode(logoReader)
+		if err != nil {
+			return nil, fmt.Errorf("tools/qr: decode logo image failed: %w", err)
+		}
+	}
+	return ps, nil
+}
+
+func (ps *params) hasLogo() bool {
+	return ps.logoImg != nil
+}
+
+func (ps *params) Close() {
+	if ps != nil && ps.logoCloser != nil {
+		_ = ps.logoCloser.Close()
+	}
+}
+
+// GenerateQRCode generates a QR image file with explicit text and options.
+func GenerateQRCode(text, output string, options QRCodeOptions) error {
+	// Normalize output path and ensure parent directory exists.
+	output = strings.TrimSpace(output)
+	if output == "" {
+		return ErrOutputPathEmpty
+	}
+	output = filepath.Clean(output)
+
+	// Render into memory first; persist to disk only after full generation succeeds.
+	var outBuffer bytes.Buffer
+	var err error
+	if err = GenerateQRCodeToWriter(text, &outBuffer, options); err != nil {
 		return err
 	}
-
+	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
+		return fmt.Errorf("tools/qr: prepare output dir failed: %w", err)
+	}
+	if err = os.WriteFile(output, outBuffer.Bytes(), 0o644); err != nil {
+		return fmt.Errorf("tools/qr: write output file failed: %w", err)
+	}
 	return nil
 }
 
-// generateWithLogoToWriter builds QR image, overlays centered logo with finder
-// protection, validates effective cover ratio, and writes final PNG to output.
-func generateWithLogoToWriter(text string, level qrcode.RecoveryLevel, version, size int, output io.Writer, logoImg image.Image, coverRatio float64) error {
-	// Auto-version mode: start from minimal encodable version and increase only
-	// until cover ratio constraints can be satisfied.
-	if version == 0 {
-		baseQR, qerr := qrcode.New(text, level)
-		if qerr != nil {
-			return fmt.Errorf("generate qrcode failed: %w", qerr)
-		}
-
-		// Try progressively larger versions to increase code area for the same logo.
-		for v := baseQR.VersionNumber; v <= 40; v++ {
-			// If forced version cannot encode payload, skip to next version.
-			candidateQR, ferr := qrcode.NewWithForcedVersion(text, v, level)
-			if ferr != nil {
-				continue
-			}
-
-			// Compose and check whether effective cover is acceptable with tolerance.
-			merged, actualCover, merr := mergeLogoOnQRCode(candidateQR, size, logoImg, coverRatio)
-			if merr != nil {
-				return merr
-			}
-			// First valid version wins to keep output QR as small as possible.
-			if isCoverSatisfied(actualCover, coverRatio) {
-				return writePNGToWriter(output, merged)
-			}
-		}
-
-		// Even v40 cannot satisfy requested cover under finder-protection rules.
-		return fmt.Errorf("unable to satisfy logo-cover %.4f with qr-version auto (max version 40)", coverRatio)
+// GenerateQRCodeToWriter generates a QR code PNG to writer with explicit text and options.
+func GenerateQRCodeToWriter(text string, output io.Writer, options QRCodeOptions) error {
+	if text == "" {
+		return ErrMissingText
+	}
+	// Writer-based API mirrors file-based behavior but writes PNG bytes to caller output.
+	if output == nil {
+		return ErrOutputWriterNil
 	}
 
-	// Fixed-version mode: honor caller version strictly (single attempt).
-	qr, err := buildQRCode(text, level, version)
+	ps, err := options.toParams()
 	if err != nil {
 		return err
 	}
-
-	merged, actualCover, err := mergeLogoOnQRCode(qr, size, logoImg, coverRatio)
-	if err != nil {
-		return err
+	defer ps.Close()
+	if !ps.hasLogo() {
+		return generateWithoutLogo(text, output, ps)
 	}
-	// In fixed-version mode we cannot scale version up, so fail with max cover hint.
-	if !isCoverSatisfied(actualCover, coverRatio) {
-		return fmt.Errorf("logo-cover %.4f is too large for qr-version %d (max %.4f with finder protection)", coverRatio, qr.VersionNumber, actualCover)
-	}
-
-	return writePNGToWriter(output, merged)
-}
-
-// mergeLogoOnQRCode renders qr as image first, then runs center logo compose logic.
-func mergeLogoOnQRCode(qr *qrcode.QRCode, size int, logoImg image.Image, coverRatio float64) (image.Image, float64, error) {
-	return mergeCenterLogo(qr.Image(size), logoImg, qr.VersionNumber, coverRatio)
+	return generateWithLogo(text, output, ps)
 }
 
 // isCoverSatisfied applies a small tolerance to absorb pixel rounding drift.
@@ -316,7 +214,7 @@ func isCoverSatisfied(actualCover, targetCover float64) bool {
 // writePNGToWriter encodes image into PNG stream and wraps encode errors.
 func writePNGToWriter(w io.Writer, img image.Image) error {
 	if err := png.Encode(w, img); err != nil {
-		return fmt.Errorf("encode output png failed: %w", err)
+		return fmt.Errorf("tools/qr: encode output png failed: %w", err)
 	}
 	return nil
 }
@@ -326,35 +224,78 @@ func buildQRCode(text string, level qrcode.RecoveryLevel, version int) (*qrcode.
 	if version == 0 {
 		qr, err := qrcode.New(text, level)
 		if err != nil {
-			return nil, fmt.Errorf("generate qrcode failed: %w", err)
+			return nil, fmt.Errorf("tools/qr: generate qrcode failed: %w", err)
 		}
 		return qr, nil
 	}
 
 	qr, err := qrcode.NewWithForcedVersion(text, version, level)
 	if err != nil {
-		return nil, fmt.Errorf("generate qrcode with version %d failed: %w", version, err)
+		return nil, fmt.Errorf("tools/qr: generate qrcode with version %d failed: %w", version, err)
 	}
 	return qr, nil
 }
 
-// decodeImage decodes png/jpeg/gif from any reader.
-func decodeImage(r io.Reader) (image.Image, error) {
-	img, _, err := image.Decode(r)
-	if err != nil {
-		return nil, err
-	}
-	return img, nil
-}
+// generateWithLogo builds QR image, overlays centered logo with finder
+// protection, validates effective cover ratio, and writes final PNG to output.
+func generateWithLogo(text string, output io.Writer, ps *params) error {
+	// Auto-version mode: start from minimal encodable version and increase only
+	// until cover ratio constraints can be satisfied.
+	if ps.version == 0 {
+		baseQR, qerr := qrcode.New(text, ps.level)
+		if qerr != nil {
+			return fmt.Errorf("tools/qr: generate qrcode failed: %w", qerr)
+		}
 
-// generateWithoutLogoToWriter builds plain QR image and writes it as PNG stream.
-func generateWithoutLogoToWriter(text string, level qrcode.RecoveryLevel, version, size int, output io.Writer) error {
-	qr, err := buildQRCode(text, level, version)
+		// Try progressively larger versions to increase code area for the same logo.
+		for v := baseQR.VersionNumber; v <= 40; v++ {
+			// If forced version cannot encode payload, skip to next version.
+			candidateQR, ferr := qrcode.NewWithForcedVersion(text, v, ps.level)
+			if ferr != nil {
+				continue
+			}
+
+			// Compose and check whether effective cover is acceptable with tolerance.
+			merged, actualCover, merr := mergeCenterLogo(candidateQR.Image(ps.size), ps.logoImg, candidateQR.VersionNumber, ps.coverRatio)
+			if merr != nil {
+				return merr
+			}
+			// First valid version wins to keep output QR as small as possible.
+			if isCoverSatisfied(actualCover, ps.coverRatio) {
+				return writePNGToWriter(output, merged)
+			}
+		}
+
+		// Even v40 cannot satisfy requested cover under finder-protection rules.
+		return fmt.Errorf("tools/qr: unable to satisfy logo-cover %.4f with qr-version auto (max version 40)", ps.coverRatio)
+	}
+
+	// Fixed-version mode: honor caller version strictly (single attempt).
+	qr, err := buildQRCode(text, ps.level, ps.version)
 	if err != nil {
 		return err
 	}
 
-	return writePNGToWriter(output, qr.Image(size))
+	merged, actualCover, err := mergeCenterLogo(qr.Image(ps.size), ps.logoImg, qr.VersionNumber, ps.coverRatio)
+	if err != nil {
+		return err
+	}
+	// In fixed-version mode we cannot scale version up, so fail with max cover hint.
+	if !isCoverSatisfied(actualCover, ps.coverRatio) {
+		return fmt.Errorf("tools/qr: logo-cover %.4f is too large for qr-version %d (max %.4f with finder protection)", ps.coverRatio, qr.VersionNumber, actualCover)
+	}
+
+	return writePNGToWriter(output, merged)
+}
+
+// generateWithoutLogo builds plain QR image and writes it as PNG stream.
+func generateWithoutLogo(text string, output io.Writer, ps *params) error {
+	qr, err := buildQRCode(text, ps.level, ps.version)
+	if err != nil {
+		return err
+	}
+
+	return writePNGToWriter(output, qr.Image(ps.size))
 }
 
 // mergeCenterLogo overlays a centered logo onto QR image while preserving scan
@@ -362,10 +303,10 @@ func generateWithoutLogoToWriter(text string, level qrcode.RecoveryLevel, versio
 func mergeCenterLogo(base, logo image.Image, version int, coverRatio float64) (image.Image, float64, error) {
 	// Input constraints for geometric math.
 	if coverRatio <= 0 || coverRatio >= 1 {
-		return nil, 0, fmt.Errorf("invalid cover ratio: %f", coverRatio)
+		return nil, 0, fmt.Errorf("tools/qr: invalid cover ratio: %f", coverRatio)
 	}
 	if version < 1 || version > 40 {
-		return nil, 0, fmt.Errorf("invalid qrcode version: %d", version)
+		return nil, 0, fmt.Errorf("tools/qr: invalid qrcode version: %d", version)
 	}
 
 	// Base QR image dimensions must be valid.
@@ -373,7 +314,7 @@ func mergeCenterLogo(base, logo image.Image, version int, coverRatio float64) (i
 	baseW := baseBounds.Dx()
 	baseH := baseBounds.Dy()
 	if baseW == 0 || baseH == 0 {
-		return nil, 0, errors.New("invalid qrcode image size")
+		return nil, 0, errors.New("tools/qr: invalid qrcode image size")
 	}
 
 	// Logo image dimensions must be valid.
@@ -381,7 +322,7 @@ func mergeCenterLogo(base, logo image.Image, version int, coverRatio float64) (i
 	logoW := logoBounds.Dx()
 	logoH := logoBounds.Dy()
 	if logoW == 0 || logoH == 0 {
-		return nil, 0, errors.New("invalid logo image size")
+		return nil, 0, errors.New("tools/qr: invalid logo image size")
 	}
 
 	// Reconstruct module geometry from version and rendered image size.
@@ -401,7 +342,7 @@ func mergeCenterLogo(base, logo image.Image, version int, coverRatio float64) (i
 		baseBounds.Max.Y-quietZoneY,
 	)
 	if codeRect.Dx() <= 0 || codeRect.Dy() <= 0 {
-		return nil, 0, errors.New("invalid qrcode code area")
+		return nil, 0, errors.New("tools/qr: invalid qrcode code area")
 	}
 
 	// Finder protection blocks reserve 8 modules around three corner finders
@@ -494,7 +435,7 @@ func shrinkForFinderSafety(targetW, targetH int, codeRect image.Rectangle, finde
 		}
 	}
 
-	return 0, 0, errors.New("unable to place centered logo without covering finder patterns")
+	return 0, 0, errors.New("tools/qr: unable to place centered logo without covering finder patterns")
 }
 
 // centeredRect creates a rectangle with given size centered inside bounds.
@@ -509,7 +450,7 @@ func centeredRect(bounds image.Rectangle, w, h int) image.Rectangle {
 // scaleLogoToTarget validates dimensions then applies nearest-neighbor scaling.
 func scaleLogoToTarget(src image.Image, width, height int) (*image.RGBA, error) {
 	if width <= 0 || height <= 0 {
-		return nil, fmt.Errorf("invalid scaled logo size: %dx%d", width, height)
+		return nil, fmt.Errorf("tools/qr: invalid scaled logo size: %dx%d", width, height)
 	}
 
 	return resizeNearest(src, width, height), nil
