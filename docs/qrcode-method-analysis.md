@@ -2,6 +2,18 @@
 
 本文说明 `qrcode.go` 当前公开 API、参数规则与主要流程。
 
+## 0. 代码结构分层
+
+- **导出入口层**：`GenerateQRCode`、`GenerateQRCodeToWriter`
+- **参数规范层**：`QRCodeOptions.toParams`、`QRCodeRecoveryLevel.toRecoveryLevel`
+- **生成流程层**：`generateWithoutLogo`、`generateWithLogo`、`buildQRCode`
+- **图像合成层**：`mergeCenterLogo`、`shrinkForFinderSafety`、`scaleLogoToTarget`
+
+这种分层把“输入校验”和“二维码生成算法”分离，方便定位问题：
+
+- 参数问题优先看 `toParams` 和导出入口。
+- 生成结果/识别率问题优先看 logo 合成层。
+
 ## 1. 对外 API
 
 ### `GenerateQRCode`
@@ -30,36 +42,51 @@ GenerateQRCodeToWriter(text string, output io.Writer, options QRCodeOptions) err
 - `Level`: 纠错等级（`QRCodeRecovery*`）。
 - `Version`: `0..40`，`0` 为自动版本。
 - `Size`: 输出尺寸，必须大于 `0`。
+- `text`: 必须是非空字符串（当前实现仅判空字符串，不做 `TrimSpace`）。
 - `LogoCover`: logo 覆盖率，范围 `(0,1)`；有 logo 时默认 `0.20`。
 - `DisableForceHighestWhenLogo`: 是否关闭 logo 模式默认“强制最高纠错”。
 - `LogoPath` / `LogoReader`: logo 输入源，二选一。
 
-常见错误：
+常见错误（入口层）：
 
-- `missing text: pass non-empty text`
-- `invalid size: ...`
-- `invalid qr-version: ...`
-- `invalid recovery level: ...`
-- `output path cannot be empty`
-- `output writer cannot be nil`
-- `logo source conflict: set either LogoPath or LogoReader`
-- `logo-cover requires logo: pass logo source`
-- `decode logo failed: ...`
+- `ErrMissingText`
+- `ErrOutputPathEmpty`
+- `ErrOutputWriterNil`
+- `ErrLogoSourceConflict`
+- `ErrLogoCoverNeedsLogo`
+- 以及带 `tools/qr:` 前缀的参数/解码错误（如 size/version/recovery/logo decode）
 
 ## 3. 主流程
 
-1. `normalizeCommonParams` 校验 `text/level/version/size`。
-2. `resolveLogoSource` 决定 logo 来源（path 或 reader）。
-3. `normalizeLogoCover` 校验/填充覆盖率。
-4. 无 logo -> `generateWithoutLogoToWriter`。
-5. 有 logo -> `effectiveRecoveryLevel` + `generateWithLogoToWriter`。
+1. `GenerateQRCode`：校验输出路径 -> 调用 `GenerateQRCodeToWriter` 生成到内存 -> 成功后一次性落盘。
+2. `GenerateQRCodeToWriter`：校验 `text/output` -> `QRCodeOptions.toParams()`。
+3. `toParams()`：校验 `level/version/size/logo source/logo cover`，并在有 logo 时完成 logo 解码。
+4. 根据 `params.hasLogo()` 分流到：
+   - `generateWithoutLogo`
+   - `generateWithLogo`
 
-版本策略：
+## 4. 单元测试覆盖清单
+
+当前建议/已覆盖的关键用例：
+
+- **文件输出主路径**：无 logo、有 logo。
+- **writer 输出主路径**：无 logo、有 logo（`LogoReader`、`LogoPath`）。
+- **错误路径**：nil writer、空 output、空 text、logo 源冲突、logo-cover 无 logo、非法 recovery level。
+- **结果正确性**：文件输出存在且可 `image.Decode`。
+- **参数结构测试**：`QRCodeOptions.toParams` 的强制最高纠错策略、默认覆盖率、核心校验。
+
+后续可继续补充：
+
+- 固定版本下覆盖率过大失败断言。
+- 自动版本无法满足覆盖率时的错误断言。
+- `DisableForceHighestWhenLogo=true` 的端到端行为测试。
+
+## 5. 版本策略
 
 - `Version == 0`: 从最小可编码版本开始向上尝试到 `v40`。
 - `Version > 0`: 固定版本单次尝试，不满足覆盖率直接报错。
 
-## 4. Logo 合成要点
+## 6. Logo 合成要点
 
 `mergeCenterLogo` 会：
 
@@ -71,7 +98,7 @@ GenerateQRCodeToWriter(text string, output io.Writer, options QRCodeOptions) err
 
 `isCoverSatisfied` 使用 `qrcodeCoverRatioTolerance=0.995` 处理像素取整误差。
 
-## 5. 最小示例
+## 7. 最小示例
 
 ### 文件输出（无 logo）
 
