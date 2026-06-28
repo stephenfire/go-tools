@@ -159,6 +159,20 @@ func Errorf(format string, values ...interface{}) {
 	wrapped.Errorf(format, values...)
 }
 
+func Fatal(msgs ...interface{}) {
+	_logLocker.RLock()
+	defer _logLocker.RUnlock()
+
+	wrapped.Fatal(msgs...)
+}
+
+func Fatalf(format string, values ...interface{}) {
+	_logLocker.RLock()
+	defer _logLocker.RUnlock()
+
+	wrapped.Fatalf(format, values...)
+}
+
 func MustDebugf(logger logrus.FieldLogger, format string, args ...interface{}) {
 	if logger == nil {
 		Debugf(format, args...)
