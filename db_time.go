@@ -43,10 +43,7 @@ func NewTime(t time.Time) Time {
 }
 
 func NewUnixTime(ts int64) Time {
-	if ts > 99999999999 || ts < (-99999999999) {
-		return Time(time.UnixMilli(ts).Truncate(TimeTruncater))
-	}
-	return Time(time.Unix(ts, 0).Truncate(TimeTruncater))
+	return Timestamp(ts).ToTime()
 }
 
 func ParseTime(layout, value string) (Time, error) {

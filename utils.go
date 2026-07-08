@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/json"
+	"hash"
 )
 
 func JsonString(m any) (string, error) {
@@ -71,4 +72,11 @@ func AllMapValueSlices[K comparable, T comparable](m map[K][]T, needDedup ...boo
 		}
 		return idslice
 	}
+}
+
+func Hash256(hasher hash.Hash, in ...[]byte) []byte {
+	for _, n := range in {
+		hasher.Write(n)
+	}
+	return hasher.Sum(nil)
 }
