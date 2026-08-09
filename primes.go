@@ -13,32 +13,42 @@ import (
 	"unicode"
 )
 
+// S is a string type with a set of convenient transformation and parsing methods.
 type S string
 
+// IsValid reports whether s is a non-empty string.
 func (s S) IsValid() bool {
 	return s != ""
 }
 
+// Trim returns a new S with leading and trailing whitespace removed.
 func (s S) Trim() S {
 	return S(strings.TrimSpace(string(s)))
 }
 
+// ToLower returns a new S with all Unicode letters mapped to their lower case.
 func (s S) ToLower() S {
 	return S(strings.ToLower(string(s)))
 }
 
+// ToUpper returns a new S with all Unicode letters mapped to their upper case.
 func (s S) ToUpper() S {
 	return S(strings.ToUpper(string(s)))
 }
 
+// Replace returns a new S with all non-overlapping instances of source
+// replaced by target.
 func (s S) Replace(source, target string) S {
 	return S(strings.ReplaceAll(string(s), source, target))
 }
 
+// Formalize returns a trimmed and lower-cased copy of s.
 func (s S) Formalize() S {
 	return S(strings.ToLower(strings.TrimSpace(string(s))))
 }
 
+// CamelToSnake converts CamelCase to snake_case. Consecutive uppercase
+// letters each get their own underscore prefix.
 func (s S) CamelToSnake() S {
 	if len(s) == 0 {
 		return ""
@@ -59,6 +69,7 @@ func (s S) CamelToSnake() S {
 	return S(rs)
 }
 
+// Includes reports whether s contains every non-empty string in ss.
 func (s S) Includes(ss ...string) bool {
 	str := string(s)
 	for _, one := range ss {
@@ -72,10 +83,13 @@ func (s S) Includes(ss ...string) bool {
 	return true
 }
 
+// SplitBy splits s into substrings separated by sep.
 func (s S) SplitBy(sep string) []string {
 	return strings.Split(string(s), sep)
 }
 
+// RegexpSplit splits s by the regular expression expr.
+// It returns an error if expr fails to compile.
 func (s S) RegexpSplit(expr string) ([]string, error) {
 	reg, err := regexp.Compile(expr)
 	if err != nil {
@@ -84,19 +98,23 @@ func (s S) RegexpSplit(expr string) ([]string, error) {
 	return reg.Split(string(s), -1), nil
 }
 
+// CSVSplit splits s by commas, including Chinese comma (，) and enumeration comma (、).
 func (s S) CSVSplit() []string {
 	reg := regexp.MustCompile("[,，、]")
 	return reg.Split(string(s), -1)
 }
 
+// String returns the underlying string value.
 func (s S) String() string {
 	return string(s)
 }
 
+// Bytes returns s as a byte slice.
 func (s S) Bytes() []byte {
 	return []byte(s)
 }
 
+// FirstByte returns the first byte of s, or 0 if s is empty.
 func (s S) FirstByte() byte {
 	bs := []byte(s)
 	if len(bs) > 0 {
@@ -105,24 +123,30 @@ func (s S) FirstByte() byte {
 	return 0
 }
 
+// Int64 parses s as a base-10 int64 after trimming whitespace.
 func (s S) Int64() (int64, error) {
 	ss := s.Trim().String()
 	return strconv.ParseInt(ss, 10, 64)
 }
 
+// Float64 parses s as a float64 after trimming whitespace.
 func (s S) Float64() (float64, error) {
 	ss := s.Trim().String()
 	return strconv.ParseFloat(ss, 64)
 }
 
+// CSVLike wraps s with SQL LIKE wildcards for CSV column matching: "%,s,%".
 func (s S) CSVLike() string {
 	return "%," + string(s) + ",%"
 }
 
+// Like wraps s with SQL LIKE wildcards: "%s%".
 func (s S) Like() string {
 	return "%" + string(s) + "%"
 }
 
+// ID parses s into an ID by extracting consecutive digits.
+// It returns an error if s contains any non-digit characters.
 func (s S) ID() (ID, error) {
 	var i int64
 	ss := s.Trim().Bytes()
@@ -137,6 +161,7 @@ func (s S) ID() (ID, error) {
 	return ID(i), nil
 }
 
+// MustID is like ID but returns 0 on parse error instead of an error.
 func (s S) MustID() ID {
 	i, err := s.ID()
 	if err != nil {
@@ -145,6 +170,7 @@ func (s S) MustID() ID {
 	return i
 }
 
+// JSON unmarshals s as JSON and returns the decoded value.
 func (s S) JSON() (JSON, error) {
 	var j *JSON
 	err := json.Unmarshal(s.Bytes(), &j)
@@ -157,6 +183,7 @@ func (s S) JSON() (JSON, error) {
 	return *j, nil
 }
 
+// SplitLines splits s into lines, handling both LF and CRLF line endings.
 func (s S) SplitLines() (SS, error) {
 	if len(s) == 0 {
 		return nil, nil
@@ -187,6 +214,7 @@ func (s S) SplitLines() (SS, error) {
 	return ss, nil
 }
 
+// FirstRune returns the first Unicode code point of s, or 0 if s is empty.
 func (s S) FirstRune() rune {
 	if len(s) == 0 {
 		return 0
@@ -194,11 +222,27 @@ func (s S) FirstRune() rune {
 	return []rune(s)[0]
 }
 
+// FirstRuneString returns the first Unicode code point of s as an S, or "" if s is empty.
 func (s S) FirstRuneString() S {
 	if len(s) == 0 {
 		return ""
 	}
 	return S([]rune(s)[0])
+}
+
+// SafeSlice truncates s to fit within maxByteLen bytes without splitting
+// a multi-byte rune. It returns the longest prefix whose byte length
+// does not exceed maxLen.
+func (s S) SafeSlice(maxByteLen int) string {
+	runes := []rune(s)
+	byteLen := 0
+	for i, r := range runes {
+		byteLen += len(string(r))
+		if byteLen > maxByteLen {
+			return string(runes[:i])
+		}
+	}
+	return string(s)
 }
 
 type SS []string
