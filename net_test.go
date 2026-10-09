@@ -98,3 +98,11 @@ func TestCustomNeverMatchStrategy(t *testing.T) {
 		t.Errorf("Expected empty map for neverMatch strategy, got size: %d", len(mapping))
 	}
 }
+
+func TestLocalFirstIP(t *testing.T) {
+	ip, err := LocalFirstIP(strategy.StandardPhysicalIPv4)
+	if err != nil {
+		t.Fatalf("LocalFirstIP returned error on current system: %v", err)
+	}
+	t.Logf("LocalFirstIP: %q", ip)
+}

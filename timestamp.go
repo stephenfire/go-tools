@@ -30,7 +30,7 @@ func (t Timestamp) ToTime() Time {
 	if t.IsMilli() {
 		return Time(time.UnixMilli(int64(t)).Truncate(time.Millisecond))
 	}
-	return Time(time.UnixMilli(int64(t)).Truncate(time.Second))
+	return Time(time.Unix(int64(t), 0).Truncate(time.Second))
 }
 
 func (t Timestamp) DiffSeconds(o Timestamp) int64 {
